@@ -180,7 +180,8 @@ func (w *Writer) writeCoreProperties() error {
 
 	w.PartContentTypes[abspath] = "application/vnd.openxmlformats-package.core-properties+xml"
 	w.GlobalRels[rid] = RelInfo{
-		Type: "http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties",
+		Type:   "http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties",
+		Target: relpath,
 	}
 
 	bb := bytes.Buffer{}

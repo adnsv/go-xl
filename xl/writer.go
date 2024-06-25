@@ -398,6 +398,19 @@ func (w *Writer) writeSheet(sh *Sheet, rid string) error {
 	x.Attr("xmlns", "http://schemas.openxmlformats.org/spreadsheetml/2006/main")
 	x.Attr("xmlns:r", "http://schemas.openxmlformats.org/officeDocument/2006/relationships")
 
+	if len(sh.Columns) > 0 {
+		x.OTag("+cols")
+		enumerate(sh.Columns, func(n int, v *Column) error {
+			x.OTag("+col").Attr("min", n).Attr("max", n)
+			if v.Width > 0 {
+				x.Attr("width", v.Width).Attr("customWidth", 1)
+			}
+			x.CTag()
+			return nil
+		})
+		x.CTag()
+	}
+
 	x.OTag("+sheetData")
 	for _, row := range sh.Rows {
 		x.OTag("+row").Attr("r", row.rowNumber)

@@ -33,6 +33,7 @@ func (wb *Workbook) AddSheet(name string) (*Sheet, error) {
 	sheet := &Sheet{
 		workbook:      wb,
 		Name:          name,
+		Columns:       map[int]*Column{},
 		nextRowNumber: 1,
 	}
 

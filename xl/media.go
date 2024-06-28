@@ -2,13 +2,10 @@ package xl
 
 import (
 	"hash/fnv"
-
-	"github.com/google/uuid"
 )
 
-func BlobHash(blob []byte) uuid.UUID {
-	h := fnv.New128()
+func BlobHash(blob []byte) uint64 {
+	h := fnv.New64()
 	h.Write(blob)
-	uid, _ := uuid.FromBytes(h.Sum([]byte{}))
-	return uid
+	return h.Sum64()
 }

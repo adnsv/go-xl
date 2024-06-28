@@ -142,7 +142,7 @@ func (w *Writer) Write(wb *Workbook) error {
 	if err != nil {
 		return err
 	}
-	err = w.writeExtendedProperties()
+	err = w.writeExtendedProperties(wb.AppName)
 	if err != nil {
 		return err
 	}
@@ -205,7 +205,7 @@ func (w *Writer) writeCoreProperties() error {
 	return w.out.WriteBlob(abspath, bb.Bytes())
 }
 
-func (w *Writer) writeExtendedProperties() error {
+func (w *Writer) writeExtendedProperties(appname string) error {
 	_, rid := w.nextGlobalID()
 
 	relpath := "docProps/app.xml"
@@ -225,9 +225,9 @@ func (w *Writer) writeExtendedProperties() error {
 	x.Attr("xmlns", "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties")
 	x.Attr("xmlns:vt", "http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes")
 
-	x.OTag("+Application")
-	x.String("App Name")
-	x.CTag()
+	if appname != "" {
+		x.OTag("+Application").String(appname).CTag()
+	}
 
 	x.CTag()
 
@@ -449,7 +449,7 @@ func (w *Writer) writeSheet(sh *Sheet, rid string) error {
 				} else {
 					return fmt.Errorf("unsupported image extension %s", ext)
 				}
-				n := BlobHash(cell.picture.Blob).String() + ext
+				n := fmt.Sprintf("%.16x%s", BlobHash(cell.picture.Blob), ext)
 				info, ok := w.mediaMap[n]
 				if !ok {
 					_, rid := w.nextRichDataID()

@@ -9,6 +9,8 @@ type Cell struct {
 	typ          CellType
 	v            string
 	picture      *PictureInfo
+
+	XF
 }
 
 type PictureInfo struct {
@@ -33,6 +35,15 @@ const (
 	// internal
 	cellTypePicture
 )
+
+type XF struct {
+	Alignment Alignment
+}
+
+type Alignment struct {
+	Horizontal string
+	Vertical   string
+}
 
 func (c *Cell) SetBool(v bool) {
 	c.typ = CellTypeBool
@@ -61,4 +72,12 @@ func (c *Cell) SetStr(v string) {
 func (c *Cell) SetPicture(p *PictureInfo) {
 	c.typ = cellTypePicture
 	c.picture = p
+}
+
+func (a *Alignment) Empty() bool {
+	return a.Horizontal == "" && a.Vertical == ""
+}
+
+func (xf *XF) Empty() bool {
+	return xf.Alignment.Empty()
 }

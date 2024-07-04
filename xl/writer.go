@@ -31,6 +31,8 @@ type Writer struct {
 	media    []*MediaInfo
 	mediaMap map[string]*MediaInfo // maps media name to media info
 
+	xfs []*XF
+
 	RichDataRels map[string]RelInfo
 }
 
@@ -154,6 +156,13 @@ func (w *Writer) Write(wb *Workbook) error {
 		}
 	}
 
+	if len(w.xfs) > 0 {
+		err = w.writeStyles()
+		if err != nil {
+			return err
+		}
+	}
+
 	err = w.writeRels("/xl/_rels/workbook.xml.rels", w.WorkbookRels)
 	if err != nil {
 		return err
@@ -255,7 +264,7 @@ func (w *Writer) writeContentTypes() error {
 	return w.out.WriteBlob("[Content_Types].xml", bb.Bytes())
 }
 
-func (w *Writer) writeStyles(wb *Workbook) error {
+func (w *Writer) writeStyles() error {
 	_, rid := w.nextWorkbookID()
 
 	relpath := "styles.xml"
@@ -274,19 +283,37 @@ func (w *Writer) writeStyles(wb *Workbook) error {
 	x.OTag("styleSheet")
 	x.Attr("xmlns", "http://schemas.openxmlformats.org/spreadsheetml/2006/main")
 
-	x.OTag("fonts")
-	x.CTag()
+	x.OTag("fonts").Attr("count", 1)
+	x.OTag("font").CTag()
+	x.CTag() // fonts
 
-	x.OTag("fills")
-	x.CTag()
+	x.OTag("fills").Attr("count", 1)
+	x.OTag("fill")
+	x.OTag("patternFill").Attr("patternType", "none").CTag()
+	x.CTag() // fill
+	x.CTag() // fills
 
-	x.OTag("borders")
-	x.CTag()
+	x.OTag("borders").Attr("count", 1)
+	x.OTag("border")
+	x.OTag("left").CTag()
+	x.OTag("top").CTag()
+	x.OTag("right").CTag()
+	x.OTag("bottom").CTag()
+	x.OTag("diagonal").CTag()
+	x.CTag() // border
+	x.CTag() // borders
 
-	x.OTag("cellStyleXfs")
+	x.OTag("cellStyleXfs").Attr("count", 1)
+	x.OTag("xf")
+	x.Attr("numFmtId", 0)
+	x.Attr("fontId", 0)
+	x.Attr("fillId", 0)
+	x.Attr("borderId", 0)
 	x.CTag()
+	x.CTag() //cellStyleXfs
 
 	x.OTag("cellXfs")
+	// TODO: finish this
 	x.CTag()
 
 	x.CTag()
@@ -380,6 +407,15 @@ func (w *Writer) writeWorkbook(wb *Workbook) error {
 	return w.out.WriteBlob(abspath, bb.Bytes())
 }
 
+func (w *Writer) FindXF(xf *XF) int {
+	for i, v := range w.xfs {
+		if *v == *xf {
+			return i
+		}
+	}
+	return -1
+}
+
 func (w *Writer) writeSheet(sh *Sheet, rid string) error {
 	relpath := "worksheets/" + sh.Name + ".xml"
 	abspath := "/xl/" + relpath
@@ -420,6 +456,14 @@ func (w *Writer) writeSheet(sh *Sheet, rid string) error {
 
 		for _, cell := range row.Cells {
 			x.OTag("+c").Attr("r", cell.coord)
+
+			if !cell.XF.Empty() {
+				i := w.FindXF(&cell.XF)
+				if i < 0 {
+					w.xfs = append(w.xfs, &cell.XF)
+				}
+				x.Attr("s", i)
+			}
 
 			switch cell.typ {
 			case CellTypeBool:

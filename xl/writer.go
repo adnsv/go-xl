@@ -283,38 +283,68 @@ func (w *Writer) writeStyles() error {
 	x.OTag("styleSheet")
 	x.Attr("xmlns", "http://schemas.openxmlformats.org/spreadsheetml/2006/main")
 
-	x.OTag("fonts").Attr("count", 1)
-	x.OTag("font").CTag()
+	x.OTag("+fonts").Attr("count", 1)
+	x.OTag("+font")
+	x.BeginContent()
+	x.CTag()
 	x.CTag() // fonts
 
-	x.OTag("fills").Attr("count", 1)
-	x.OTag("fill")
+	x.OTag("+fills").Attr("count", 1)
+	x.OTag("+fill")
 	x.OTag("patternFill").Attr("patternType", "none").CTag()
 	x.CTag() // fill
 	x.CTag() // fills
 
-	x.OTag("borders").Attr("count", 1)
-	x.OTag("border")
-	x.OTag("left").CTag()
-	x.OTag("top").CTag()
-	x.OTag("right").CTag()
-	x.OTag("bottom").CTag()
-	x.OTag("diagonal").CTag()
+	x.OTag("+borders").Attr("count", 1)
+	x.OTag("+border")
+	x.OTag("+left").CTag()
+	x.OTag("+right").CTag()
+	x.OTag("+top").CTag()
+	x.OTag("+bottom").CTag()
+	x.OTag("+diagonal").CTag()
 	x.CTag() // border
 	x.CTag() // borders
 
-	x.OTag("cellStyleXfs").Attr("count", 1)
-	x.OTag("xf")
-	x.Attr("numFmtId", 0)
-	x.Attr("fontId", 0)
-	x.Attr("fillId", 0)
-	x.Attr("borderId", 0)
+	x.OTag("+cellStyleXfs").Attr("count", 1)
+	x.OTag("+xf")
+	x.Attr("numFmtId", "0")
+	x.Attr("fontId", "0")
+	x.Attr("fillId", "0")
+	x.Attr("borderId", "0")
 	x.CTag()
 	x.CTag() //cellStyleXfs
 
-	x.OTag("cellXfs")
-	// TODO: finish this
+	x.OTag("+cellXfs").Attr("count", len(w.xfs)+1)
+	// Default xf (index 0)
+	x.OTag("+xf")
+	x.Attr("numFmtId", "0")
+	x.Attr("fontId", "0")
+	x.Attr("fillId", "0")
+	x.Attr("borderId", "0")
+	x.Attr("xfId", "0")
 	x.CTag()
+	// Custom xfs collected from cells
+	for _, xf := range w.xfs {
+		x.OTag("+xf")
+		x.Attr("numFmtId", "0")
+		x.Attr("fontId", "0")
+		x.Attr("fillId", "0")
+		x.Attr("borderId", "0")
+		x.Attr("xfId", "0")
+		if !xf.Alignment.Empty() {
+			x.Attr("applyAlignment", "1")
+			x.OTag("alignment")
+			if xf.Alignment.Horizontal != "" {
+				x.Attr("horizontal", xf.Alignment.Horizontal)
+			}
+			if xf.Alignment.Vertical != "" {
+				x.Attr("vertical", xf.Alignment.Vertical)
+			}
+			x.CTag() // alignment
+		}
+		x.CTag() // xf
+	}
+	x.CTag() // cellXfs
 
 	x.CTag()
 
@@ -461,8 +491,10 @@ func (w *Writer) writeSheet(sh *Sheet, rid string) error {
 				i := w.FindXF(&cell.XF)
 				if i < 0 {
 					w.xfs = append(w.xfs, &cell.XF)
+					i = len(w.xfs) - 1
 				}
-				x.Attr("s", i)
+				// Style index is xfs array index + 1 (because default xf is at index 0)
+				x.Attr("s", i+1)
 			}
 
 			switch cell.typ {
@@ -519,6 +551,15 @@ func (w *Writer) writeSheet(sh *Sheet, rid string) error {
 		x.CTag() // row
 	}
 	x.CTag() // sheetData
+
+	// Write mergeCells if any exist
+	if len(sh.MergeCells) > 0 {
+		x.OTag("+mergeCells").Attr("count", len(sh.MergeCells))
+		for _, mc := range sh.MergeCells {
+			x.OTag("+mergeCell").Attr("ref", mc.Ref).CTag()
+		}
+		x.CTag() // mergeCells
+	}
 
 	x.CTag() // worksheet
 

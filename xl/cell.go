@@ -61,7 +61,7 @@ func (c *Cell) SetInt(v int64) {
 
 func (c *Cell) SetFloat(v float64) {
 	c.typ = CellTypeNumber
-
+	c.v = fmt.Sprintf("%g", v)
 }
 
 func (c *Cell) SetStr(v string) {

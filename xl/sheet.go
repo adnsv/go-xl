@@ -7,24 +7,30 @@ import (
 	"unicode"
 )
 
+// Sheet represents a single worksheet in a workbook.
+// It contains rows, column definitions, and merged cell ranges.
 type Sheet struct {
 	Name       string
 	Rows       []*Row
-	Columns    map[int]*Column // 1-based
-	MergeCells []MergeCell
+	Columns    map[int]*Column // 1-based column index to column properties
+	MergeCells []MergeCell     // List of merged cell ranges
 
 	workbook      *Workbook
 	nextRowNumber int // 1-based, incremented as we add rows
 }
 
+// Column represents column-level properties such as width.
 type Column struct {
-	Width float32
+	Width float32 // Column width in Excel units
 }
 
+// MergeCell represents a range of cells that should be merged in the worksheet.
 type MergeCell struct {
 	Ref string // Cell range reference, e.g., "A1:B2"
 }
 
+// AddRow adds a new row to the sheet and returns a pointer to it.
+// Rows are added sequentially starting from row 1.
 func (s *Sheet) AddRow() *Row {
 	r := &Row{
 		sheet:            s,
@@ -36,6 +42,9 @@ func (s *Sheet) AddRow() *Row {
 	return r
 }
 
+// SetColumnWidth sets the width of a column (1-based index).
+// Setting width <= 0 removes any custom width, reverting to default.
+// Column 1 is "A", column 2 is "B", etc.
 func (s *Sheet) SetColumnWidth(colNumber int, w float32) {
 	if colNumber <= 0 {
 		return

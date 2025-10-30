@@ -14,6 +14,8 @@ import (
 	"golang.org/x/exp/maps"
 )
 
+// Writer is responsible for generating OpenXML SpreadsheetML files from a workbook.
+// It manages shared strings, styles, fonts, media, and all XML part generation.
 type Writer struct {
 	out            Storage
 	lastGlobalId   int
@@ -31,23 +33,28 @@ type Writer struct {
 	media    []*MediaInfo
 	mediaMap map[string]*MediaInfo // maps media name to media info
 
-	xfs []*XF
+	xfs   []*XF
+	fonts []*Font
 
 	RichDataRels map[string]RelInfo
 }
 
+// RelInfo contains relationship information for OpenXML parts.
 type RelInfo struct {
 	Type   string // url to schema type
 	Target string // relative path
 }
 
+// MediaInfo contains embedded media file information (images).
 type MediaInfo struct {
 	Name string // hashed blob + extension
-	Blob []byte
-	IId  int
-	RId  string
+	Blob []byte // raw file data
+	IId  int    // internal ID
+	RId  string // relationship ID
 }
 
+// NewWriter creates a new Writer that will output to the specified storage.
+// The storage can be a ZIP file storage or directory storage for debugging.
 func NewWriter(s Storage) *Writer {
 	w := &Writer{
 		out:                 s,
@@ -69,6 +76,9 @@ func NewWriter(s Storage) *Writer {
 	return w
 }
 
+// SharedString adds a string to the shared string table and returns its index.
+// If the string already exists, returns the existing index.
+// This is used internally for efficient string storage in cells.
 func (w *Writer) SharedString(s string) int {
 	if i, ok := w.sharedStringMap[s]; ok {
 		return i
@@ -92,6 +102,9 @@ func (w *Writer) nextRichDataID() (int, string) {
 	return w.lastRichDataId, fmt.Sprintf("rId%d", w.lastRichDataId)
 }
 
+// Write generates a complete Excel workbook file from the given Workbook.
+// It writes all necessary XML parts, relationships, and content types to the storage.
+// Returns an error if any part of the generation fails.
 func (w *Writer) Write(wb *Workbook) error {
 	var err error
 
@@ -283,10 +296,61 @@ func (w *Writer) writeStyles() error {
 	x.OTag("styleSheet")
 	x.Attr("xmlns", "http://schemas.openxmlformats.org/spreadsheetml/2006/main")
 
-	x.OTag("+fonts").Attr("count", 1)
+	// Collect unique fonts from all xfs
+	for _, xf := range w.xfs {
+		if !xf.Font.IsDefault() {
+			if w.FindFont(&xf.Font) < 0 {
+				w.fonts = append(w.fonts, &xf.Font)
+			}
+		}
+	}
+
+	// Write fonts section
+	fontCount := len(w.fonts) + 1 // +1 for default font at index 0
+	x.OTag("+fonts").Attr("count", fontCount)
+
+	// Font 0: Default font
 	x.OTag("+font")
-	x.BeginContent()
-	x.CTag()
+	x.OTag("sz").Attr("val", 11).CTag()
+	x.OTag("name").Attr("val", "Calibri").CTag()
+	x.OTag("family").Attr("val", 2).CTag()
+	x.CTag() // font
+
+	// Custom fonts
+	for _, font := range w.fonts {
+		x.OTag("+font")
+
+		// Element order: b, i, strike, u, sz, color, name, family
+		if font.Bold {
+			x.OTag("b").CTag()
+		}
+		if font.Italic {
+			x.OTag("i").CTag()
+		}
+		if font.Strikethrough {
+			x.OTag("strike").CTag()
+		}
+		if font.Underline != UnderlineNone {
+			if font.Underline == UnderlineSingle {
+				x.OTag("u").CTag() // Empty element for single underline
+			} else {
+				x.OTag("u").Attr("val", string(font.Underline)).CTag()
+			}
+		}
+
+		// Size (use 11 if not specified)
+		size := font.Size
+		if size == 0 {
+			size = 11
+		}
+		x.OTag("sz").Attr("val", size).CTag()
+
+		// Basic font properties for compatibility
+		x.OTag("name").Attr("val", "Calibri").CTag()
+		x.OTag("family").Attr("val", 2).CTag()
+
+		x.CTag() // font
+	}
 	x.CTag() // fonts
 
 	x.OTag("+fills").Attr("count", 1)
@@ -327,12 +391,33 @@ func (w *Writer) writeStyles() error {
 	for _, xf := range w.xfs {
 		x.OTag("+xf")
 		x.Attr("numFmtId", "0")
-		x.Attr("fontId", "0")
+
+		// Determine font ID
+		fontId := 0 // Default font
+		if !xf.Font.IsDefault() {
+			fontIdx := w.FindFont(&xf.Font)
+			if fontIdx >= 0 {
+				fontId = fontIdx + 1 // +1 because default font is at index 0
+			}
+		}
+		x.Attr("fontId", fontId)
+
 		x.Attr("fillId", "0")
 		x.Attr("borderId", "0")
 		x.Attr("xfId", "0")
+
+		// Set applyFont if using custom font
+		if !xf.Font.IsDefault() {
+			x.Attr("applyFont", "1")
+		}
+
+		// Set applyAlignment if using custom alignment
 		if !xf.Alignment.Empty() {
 			x.Attr("applyAlignment", "1")
+		}
+
+		// Write alignment element if not empty
+		if !xf.Alignment.Empty() {
 			x.OTag("alignment")
 			if xf.Alignment.Horizontal != "" {
 				x.Attr("horizontal", xf.Alignment.Horizontal)
@@ -342,6 +427,7 @@ func (w *Writer) writeStyles() error {
 			}
 			x.CTag() // alignment
 		}
+
 		x.CTag() // xf
 	}
 	x.CTag() // cellXfs
@@ -440,6 +526,16 @@ func (w *Writer) writeWorkbook(wb *Workbook) error {
 func (w *Writer) FindXF(xf *XF) int {
 	for i, v := range w.xfs {
 		if *v == *xf {
+			return i
+		}
+	}
+	return -1
+}
+
+// FindFont returns the index of a matching font in the fonts slice, or -1 if not found.
+func (w *Writer) FindFont(font *Font) int {
+	for i, f := range w.fonts {
+		if *f == *font {
 			return i
 		}
 	}
